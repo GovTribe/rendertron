@@ -1,3 +1,4 @@
+/* tslint:disable:no-trailing-whitespace */
 import * as puppeteer from 'puppeteer';
 import * as url from 'url';
 
@@ -41,6 +42,25 @@ export class Renderer {
       }
     }
 
+    // @ts-ignore
+    function inlineStyles(stylesheetContents: Array) {
+      // Strip only script tags that contain JavaScript (either no type attribute or one that contains "javascript")
+      const elements = document.querySelectorAll('link[rel="stylesheet"]');
+      for (const e of Array.from(elements)) {
+        const node = e as HTMLLinkElement;
+        const entry = stylesheetContents.find((entry: Object) => {
+          // @ts-ignore
+          return entry.href === node.href;
+        });
+
+        if (entry) {
+          const style = document.createElement('style');
+          style.textContent = entry.css;
+          // @ts-ignore
+          node.replaceWith(style);
+        }
+      }
+    }
     /**
      * Injects a <base> tag which allows other resources to load. This
      * has no effect on serialised output, but allows it to verify render
@@ -64,6 +84,7 @@ export class Renderer {
     }
 
     const page = await this.browser.newPage();
+    const stylesheetContents: Array<object> = [];
 
     // Page may reload when setting isMobile
     // https://github.com/GoogleChrome/puppeteer/blob/v1.10.0/docs/api.md#pagesetviewportviewport
@@ -85,6 +106,21 @@ export class Renderer {
     page.addListener('response', (r: puppeteer.Response) => {
       if (!response) {
         response = r;
+      }
+    });
+
+    page.on('console', (consoleObj) => console.log(consoleObj.text()));
+
+    page.addListener('response', async (r: puppeteer.Response) => {
+      const responseUrl = r.url();
+      const sameOrigin = new URL(responseUrl).origin === new URL(requestUrl).origin;
+      const isStylesheet = r.request().resourceType() === 'stylesheet';
+
+      if (sameOrigin && isStylesheet) {
+        stylesheetContents.push({
+          href: responseUrl,
+          css: await r.text(),
+        });
       }
     });
 
@@ -131,13 +167,14 @@ export class Renderer {
     if (statusCode === 200 && newStatusCode) {
       statusCode = newStatusCode;
     }
-
     // Remove script & import tags.
     await page.evaluate(stripPage);
     // Inject <base> tag with the origin of the request (ie. no path).
     const parsedUrl = url.parse(requestUrl);
     await page.evaluate(
         injectBaseHref, `${parsedUrl.protocol}//${parsedUrl.host}`);
+
+    await page.evaluate(inlineStyles, stylesheetContents);
 
     // Serialize page.
     const result = await page.evaluate('document.firstElementChild.outerHTML');
