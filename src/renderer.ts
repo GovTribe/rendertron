@@ -113,7 +113,7 @@ export class Renderer {
 
     page.addListener('response', async (r: puppeteer.Response) => {
       const responseUrl = r.url();
-      const sameOrigin = new URL(responseUrl).origin === new URL(requestUrl).origin;
+      const sameOrigin = url.parse(responseUrl).host === new URL(requestUrl).host;
       const isStylesheet = r.request().resourceType() === 'stylesheet';
 
       if (sameOrigin && isStylesheet) {
