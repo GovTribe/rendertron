@@ -42,9 +42,11 @@ export class Renderer {
       }
     }
 
-    // @ts-ignore
-    function inlineStyles(stylesheetContents: Array) {
-      // Strip only script tags that contain JavaScript (either no type attribute or one that contains "javascript")
+    /**
+     * Inline all same origin stylesheets
+     * @param stylesheetContents
+     */
+    function inlineStyles(stylesheetContents: Array<object>) {
       const elements = document.querySelectorAll('link[rel="stylesheet"]');
       for (const e of Array.from(elements)) {
         const node = e as HTMLLinkElement;
@@ -55,6 +57,7 @@ export class Renderer {
 
         if (entry) {
           const style = document.createElement('style');
+          // @ts-ignore
           style.textContent = entry.css;
           // @ts-ignore
           node.replaceWith(style);
