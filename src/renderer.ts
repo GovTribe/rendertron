@@ -14,6 +14,11 @@ type ViewportDimensions = {
   width: number; height: number;
 };
 
+type StylesheetContent = {
+  href: string,
+  css: string
+};
+
 const MOBILE_USERAGENT =
   'Mozilla/5.0 (Linux; Android 8.0.0; Pixel 2 XL Build/OPD1.170816.004) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/68.0.3440.75 Mobile Safari/537.36';
 
@@ -32,6 +37,29 @@ export class Renderer {
 
   async serialize(requestUrl: string, isMobile: boolean):
     Promise<SerializedResponse> {
+
+    /**
+     * Inline all same origin stylesheets
+     */
+    function inlineStyles(stylesheetContents: Array<StylesheetContent>) {
+      const elements = document.querySelectorAll('link[rel="stylesheet"]');
+      for (const e of Array.from(elements)) {
+        const node = e as HTMLLinkElement;
+        const entry = stylesheetContents.find((entry: Object) => {
+          // @ts-ignore
+          return entry.href === node.href;
+        });
+
+        if (entry) {
+          const style = document.createElement('style');
+          // @ts-ignore
+          style.textContent = entry.css;
+          // @ts-ignore
+          node.replaceWith(style);
+        }
+      }
+    }
+
     /**
      * Executed on the page after the page has loaded. Strips script and
      * import tags to prevent further loading of resources.
@@ -67,6 +95,7 @@ export class Renderer {
     }
 
     const page = await this.browser.newPage();
+    const stylesheetContents: Array<StylesheetContent> = [];
 
     // Page may reload when setting isMobile
     // https://github.com/GoogleChrome/puppeteer/blob/v1.10.0/docs/api.md#pagesetviewportviewport
@@ -88,6 +117,20 @@ export class Renderer {
     page.addListener('response', (r: puppeteer.Response) => {
       if (!response) {
         response = r;
+      }
+    });
+
+    page.on('console', (consoleObj) => console.log(consoleObj.text()));
+
+    page.addListener('response', async (r: puppeteer.Response) => {
+      const responseUrl = r.url();
+      const isStylesheet = r.request().resourceType() === 'stylesheet';
+
+      if (isStylesheet) {
+        stylesheetContents.push({
+          href: responseUrl,
+          css: await r.text(),
+        });
       }
     });
 
@@ -161,6 +204,8 @@ export class Renderer {
     const parsedUrl = url.parse(requestUrl);
     await page.evaluate(
       injectBaseHref, `${parsedUrl.protocol}//${parsedUrl.host}${dirname(parsedUrl.pathname || '')}`);
+
+    await page.evaluate(inlineStyles, stylesheetContents);
 
     // Serialize page.
     const result = await page.content() as string;
