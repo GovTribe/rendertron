@@ -36,6 +36,7 @@ export type Config = {
     height: number;
     headers: { [key: string]: string };
     puppeteerArgs: Array<string>;
+    ignoreHTTPSErrors: boolean;
 };
 
 export class ConfigManager {
@@ -52,8 +53,9 @@ export class ConfigManager {
         width: 1000,
         height: 1000,
         headers: {},
-        puppeteerArgs: ['--no-sandbox']
-    };
+        puppeteerArgs: ['--no-sandbox'],
+        ignoreHTTPSErrors: true
+};
 
     static async getConfiguration(): Promise<Config> {
         // Load config.json if it exists.
